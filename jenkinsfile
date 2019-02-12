@@ -1,36 +1,33 @@
-pipeline {
-  environment {
-    registry = "harbor.eu.cicd.swarm.audi/siva"
-    registryCredential = 'Harbor_ID'
-    dockerImage = ''
-  }
-  agent any
-  stages {
-    stage('Cloning Git') {
-      steps {
-        git 'https://github.com/Sivajey/Golang.git'
-      }
+def CONTAINER_NAME="Golang"
+def CONTAINER_TAG="latest"
+def DOCKER_HUB_USER="siva"
+
+node {
+
+    stage('Clone repository') {
+        /* Let's make sure we have the repository cloned to our workspace */
+
+        checkout scm
     }
-    stage('Building image') {
-      steps{
-        script {
-          dockerImage = docker.build registry + ":$BUILD_NUMBER"
+
+    stage('Image Build'){
+        imageBuild(CONTAINER_NAME, CONTAINER_TAG)
+    }
+
+    stage('Push to Docker Registry'){
+        withCredentials([usernamePassword(credentialsId: 'Harbor_ID', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+            pushToImage(CONTAINER_NAME, CONTAINER_TAG, USERNAME, PASSWORD)
         }
-      }
     }
-    stage('Deploy Image') {
-      steps{
-        script {
-          docker.withRegistry( '', registryCredential ) {
-            dockerImage.push()
-          }
-        }
-      }
-    }
-    stage('Remove Unused docker image') {
-      steps{
-        sh "docker rmi $registry:$BUILD_NUMBER"
-      }
-    }
-  }
+
 }
+def imageBuild(containerName, tag){
+    sh "docker build -t $containerName:$tag  -t $containerName --pull --no-cache ."
+    echo "Image build complete"
+}
+
+def pushToImage(containerName, tag, dockerUser, dockerPassword){
+    sh "docker login -u $dockerUser -p $dockerPassword"
+    sh "docker tag $containerName:$tag $dockerUser/$containerName:$tag"
+    sh "docker push $dockerUser/$containerName:$tag"
+    echo "Image push complete"
